@@ -4,5 +4,5 @@ gem "sinatra"
 gem "sinatra-reloader"
 gem "thin"
 
-gem "influxdb"
+gem "influxdb-client"
 

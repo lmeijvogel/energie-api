@@ -3,7 +3,7 @@ GEM
   specs:
     daemons (1.4.1)
     eventmachine (1.2.7)
-    influxdb (0.8.1)
+    influxdb-client (2.7.0)
     multi_json (1.15.0)
     mustermann (1.1.1)
       ruby2_keywords (~> 0.0.1)
@@ -34,7 +34,7 @@ PLATFORMS
   ruby
 
 DEPENDENCIES
-  influxdb
+  influxdb-client
   sinatra
   sinatra-reloader
   thin
