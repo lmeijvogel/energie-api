@@ -15,6 +15,13 @@ class App < Sinatra::Base
     config.also_reload 'lib/*.rb'
   end
 
+  configure :production do |config|
+    register Sinatra::Reloader
+    config.also_reload 'lib/*.rb'
+    set :bind, "0.0.0.0"
+  end
+
+
   get '/api/:field/last_30_days' do
     today = DateTime.now()
 
