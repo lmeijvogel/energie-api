@@ -23,4 +23,4 @@ USER api
 COPY . /app/
 
 ENTRYPOINT ["tini", "--"]
-CMD ["bundle", "exec", "ruby", "app.rb", "--port", "4567", "-o", "0.0.0.0"]
+CMD ["bundle", "exec", "ruby", "app.rb", "--port", "4567"]

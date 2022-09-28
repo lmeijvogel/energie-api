@@ -7,3 +7,4 @@ services:
       - APP_ENV=production
     ports:
       - "4567:4567"
+    restart: unless-stopped

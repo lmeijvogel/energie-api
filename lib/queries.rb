@@ -29,7 +29,6 @@ class Queries
       .take_difference
       .build
 
-    # MyLogger.info query
     _perform_query(query)
   end
 
@@ -61,7 +60,6 @@ class Queries
       QUERY
     end.join("\n");
 
-    MyLogger.info query
     client = InfluxDB2::Client.new(@host, @token, org: @org)
     query_api = client.create_query_api
 
