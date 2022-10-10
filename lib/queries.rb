@@ -81,14 +81,35 @@ class Queries
 
       from(bucket:"readings")
       |> range(start: -1h)
-      |> filter(fn: (r) => r._measurement == "current")
+      |> filter(fn: (r) => r._measurement == "current" and r._field == "current")
       |> window(every: 30s)
       |> max()
       |> duplicate(column: "_start", as: "_time")
       |> window(every: inf)
+      |> yield(name: "current")
+
+      from(bucket:"readings")
+      |> range(start: -1h)
+      |> filter(fn: (r) => r._measurement == "current" and r._field == "generation")
+      |> window(every: 30s)
+      |> max()
+      |> duplicate(column: "_start", as: "_time")
+      |> window(every: inf)
+      |> yield(name: "generation")
     QUERY
 
-    _perform_query(query)
+    client = InfluxDB2::Client.new(@host, @token, org: @org)
+    query_api = client.create_query_api
+
+    results = query_api.query(query: query)
+
+    %i[current generation].each_with_object({}) do |sensor_name, result|
+      sensor_result = results.values.find do |table|
+        table.columns.find {|c| c.label == "result" }.default_value == sensor_name.to_s
+      end
+
+      result[sensor_name] = collect_rows(sensor_result)
+    end
   end
 
   def _perform_query(query)
