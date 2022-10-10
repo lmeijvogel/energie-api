@@ -20,8 +20,6 @@ class App < Sinatra::Base
   end
 
   configure :production do |config|
-    register Sinatra::Reloader
-    config.also_reload 'lib/*.rb'
     set :bind, "0.0.0.0"
   end
 
