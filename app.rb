@@ -13,10 +13,14 @@ class App < Sinatra::Base
   configure :development do |config|
     register Sinatra::Reloader
     config.also_reload 'lib/*.rb'
+
+    set :logging, true
   end
 
   configure :production do |config|
     register Sinatra::Reloader
+    use Rack::CommonLogger
+
     config.also_reload 'lib/*.rb'
     set :bind, "0.0.0.0"
   end
