@@ -79,22 +79,14 @@ class Queries
       import "date"
       import "experimental"
 
-      from(bucket:"readings")
+      from(bucket:"readings_last_hour")
       |> range(start: -1h)
       |> filter(fn: (r) => r._measurement == "current" and r._field == "current")
-      |> window(every: 30s)
-      |> max()
-      |> duplicate(column: "_start", as: "_time")
-      |> window(every: inf)
       |> yield(name: "current")
 
-      from(bucket:"readings")
+      from(bucket:"readings_last_hour")
       |> range(start: -1h)
       |> filter(fn: (r) => r._measurement == "current" and r._field == "generation")
-      |> window(every: 30s)
-      |> max()
-      |> duplicate(column: "_start", as: "_time")
-      |> window(every: inf)
       |> yield(name: "generation")
     QUERY
 
