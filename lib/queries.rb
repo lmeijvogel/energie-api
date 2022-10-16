@@ -60,17 +60,18 @@ class Queries
       QUERY
     end.join("\n");
 
-    client = InfluxDB2::Client.new(@host, @token, org: @org)
-    query_api = client.create_query_api
+    with_client do |client|
+      query_api = client.create_query_api
 
-    results = query_api.query(query: query)
+      results = query_api.query(query: query)
 
-    %i[huiskamer tuinkamer zolder].each_with_object({}) do |sensor_name, result|
-      sensor_result = results.values.find do |table|
-        table.columns.find {|c| c.label == "result" }.default_value == sensor_name.to_s
+      %i[huiskamer tuinkamer zolder].each_with_object({}) do |sensor_name, result|
+        sensor_result = results.values.find do |table|
+          table.columns.find {|c| c.label == "result" }.default_value == sensor_name.to_s
+        end
+
+        result[sensor_name] = collect_rows(sensor_result)
       end
-
-      result[sensor_name] = collect_rows(sensor_result)
     end
   end
 
@@ -90,29 +91,38 @@ class Queries
       |> yield(name: "generation")
     QUERY
 
-    client = InfluxDB2::Client.new(@host, @token, org: @org)
-    query_api = client.create_query_api
+    with_client do |client|
+      query_api = client.create_query_api
 
-    results = query_api.query(query: query)
+      results = query_api.query(query: query)
 
-    %i[current generation].each_with_object({}) do |sensor_name, result|
-      sensor_result = results.values.find do |table|
-        table.columns.find {|c| c.label == "result" }.default_value == sensor_name.to_s
+      %i[current generation].each_with_object({}) do |sensor_name, result|
+        sensor_result = results.values.find do |table|
+          table.columns.find {|c| c.label == "result" }.default_value == sensor_name.to_s
+        end
+
+        result[sensor_name] = collect_rows(sensor_result)
       end
-
-      result[sensor_name] = collect_rows(sensor_result)
     end
   end
 
   def _perform_query(query)
-    client = InfluxDB2::Client.new(@host, @token, org: @org)
-    query_api = client.create_query_api
+    with_client do |client|
+      query_api = client.create_query_api
 
-    result = query_api.query(query: query)
+      result = query_api.query(query: query)
 
-    result[0].records.map do |record|
-      record.values.values_at("_time", "_value")
+      result[0].records.map do |record|
+        record.values.values_at("_time", "_value")
+      end
     end
+  end
+
+  private
+  def with_client
+    client = InfluxDB2::Client.new(@host, @token, org: @org)
+
+    yield client
   end
 
   class QueryBuilder
