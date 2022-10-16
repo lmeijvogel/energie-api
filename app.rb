@@ -56,7 +56,8 @@ class App < Sinatra::Base
   end
 
   get '/api/stroom/recent' do
-    querier.recent_power_usage.to_json
+    page = params[:page].to_i
+    querier.recent_power_usage(page: page).to_json
   end
 
   get '/api/temperature/:location/:period/:year/?:month?/?:day?' do

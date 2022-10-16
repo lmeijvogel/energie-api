@@ -76,18 +76,19 @@ class Queries
     end
   end
 
-  def recent_power_usage
-    query = <<~QUERY
-      import "date"
-      import "experimental"
+  def recent_power_usage(page:)
+    start = (page + 1)*10
 
+    optional_timezone = @window == "1h" ? timezone_import : nil
+
+    query = <<~QUERY
       from(bucket:"readings_last_hour")
-      |> range(start: -1h)
+      |> range(start: -#{start}m)
       |> filter(fn: (r) => r._measurement == "current" and r._field == "current")
       |> yield(name: "current")
 
       from(bucket:"readings_last_hour")
-      |> range(start: -1h)
+      |> range(start: -#{start}m)
       |> filter(fn: (r) => r._measurement == "current" and r._field == "generation")
       |> yield(name: "generation")
     QUERY
