@@ -53,7 +53,7 @@ class Queries
 
       <<~QUERY
         from(bucket: "sensors")
-          |> range(start: #{start}, stop: #{stop})
+          |> range(start: #{start.iso8601}, stop: #{stop.iso8601})
           |> filter(fn: (r) => r["entity_id"] == "#{table}")
           |> filter(fn: (r) => r["_field"] == "value")
           |> aggregateWindow(every: #{window}, fn: mean, createEmpty: false)
@@ -141,7 +141,7 @@ class Queries
         #{optional_timezone}
 
         from(bucket: "#{@bucket}")
-        |> range(start: #{@start}, stop: #{@stop})
+        |> range(start: #{@start.iso8601}, stop: #{@stop.iso8601})
         |> filter(fn: (r) => r._measurement == "#{@field_name}")
         |> window(every: #{@window}, createEmpty: true)
         |> #{@aggregate_with}
