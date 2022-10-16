@@ -136,6 +136,7 @@ class Queries
 
       result = query_api.query(query: query)
 
+      return [] if !result || !result[0]
       result[0].records.map do |record|
         record.values.values_at("_time", "_value")
       end
