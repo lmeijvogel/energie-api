@@ -84,7 +84,7 @@ class App < Sinatra::Base
 
 
   def querier
-    Queries.new(ENV.fetch("HOST"), ENV.fetch("ORG"), ENV.fetch("TOKEN"))
+    Queries.new(ENV.fetch("HOST"), ENV.fetch("ORG"), ENV.fetch("TOKEN"), ENV.fetch("USE_SSL") != "false")
   end
 
   def get_query_range(params, field_name = nil)

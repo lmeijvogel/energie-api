@@ -3,10 +3,11 @@ require "influxdb-client"
 require "my_logger"
 
 class Queries
-  def initialize(host, org, token)
+  def initialize(host, org, token, use_ssl)
     @host = host
     @org = org
     @token = token
+    @use_ssl = use_ssl
   end
 
   def gas_usage(start, stop, window)
@@ -120,7 +121,7 @@ class Queries
 
   private
   def with_client
-    client = InfluxDB2::Client.new(@host, @token, org: @org)
+    client = InfluxDB2::Client.new(@host, @token, org: @org, use_ssl: @use_ssl)
 
     yield client
   end
