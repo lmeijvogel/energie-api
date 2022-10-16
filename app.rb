@@ -34,6 +34,10 @@ class App < Sinatra::Base
       querier.gas_usage(start_of_period, today, "1h").to_json
     when "stroom"
       querier.stroom_usage(start_of_period, today, "1h").to_json
+    when "generation"
+      querier.stroom_generation(start_of_period, today, "1h").to_json
+    when "back_delivery"
+      querier.stroom_back_delivery(start_of_period, today, "1h").to_json
     when "water"
       querier.water_usage(start_of_period, today, "1h").to_json
     end
@@ -49,6 +53,10 @@ class App < Sinatra::Base
       querier.gas_usage(start_of_period, today, "1d").to_json
     when "stroom"
       querier.stroom_usage(start_of_period, today, "1d").to_json
+    when "back_delivery"
+      querier.stroom_back_delivery(start_of_period, today, "1d").to_json
+    when "generation"
+      querier.stroom_generation(start_of_period, today, "1d").to_json
     when "water"
       # Water is measured differently, so needs a different starting point
       querier.water_usage(start_of_period + 1, today, "1d").to_json
@@ -76,6 +84,10 @@ class App < Sinatra::Base
       querier.gas_usage(start, stop, window)
     when "stroom"
       querier.stroom_usage(start, stop, window)
+    when "back_delivery"
+      querier.stroom_back_delivery(start, stop, window)
+    when "generation"
+      querier.stroom_generation(start, stop, window)
     when "water"
       querier.water_usage(start, stop, window)
     end

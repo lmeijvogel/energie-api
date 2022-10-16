@@ -26,10 +26,32 @@ class Queries
     query = QueryBuilder.new("readings", "stroom")
       .range(start, stop, window)
       .aggregate_with("max()")
-      .interpolate
       .take_difference
       .build
 
+    MyLogger.info query
+    _perform_query(query)
+  end
+
+  def stroom_generation(start, stop, window)
+    query = QueryBuilder.new("readings", "opwekking")
+      .range(start, stop, window)
+      .aggregate_with("sum()")
+      .build
+
+    MyLogger.info query
+
+    _perform_query(query)
+  end
+
+  def stroom_back_delivery(start, stop, window)
+    query = QueryBuilder.new("readings", "levering")
+      .range(start, stop, window)
+      .aggregate_with("max()")
+      .take_difference
+      .build
+
+    MyLogger.info query
     _perform_query(query)
   end
 
