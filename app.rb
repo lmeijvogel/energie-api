@@ -101,14 +101,14 @@ class App < Sinatra::Base
 
       [end_of_yesterday, start_of_tomorrow, "1h"]
     when "month"
-      month = DateTime.new(Integer(params[:year]), Integer(params[:month]), 1)
+      month = Date.new(Integer(params[:year]), Integer(params[:month]), 1)
 
-      last_month = month << 1
-      next_month = month >> 1
+      day_before_month = month.prev_day
+      next_month = month.next_month
 
-      start_of_this_month = DateTime.new(month.year, month.month, 1)
-      end_of_previous_month = DateTime.new(last_month.year, last_month.month, -1)
-      start_of_next_month = DateTime.new(next_month.year, next_month.month, 1)
+      start_of_this_month = Time.new(month.year, month.month, month.day)
+      end_of_previous_month = Time.new(day_before_month.year, day_before_month.month, day_before_month.day)
+      start_of_next_month = Time.new(next_month.year, next_month.month, next_month.day)
 
       window = field_name == "temperature" ? "1h" : "1d";
       start_of_period = field_name == "temperature" ? start_of_this_month : end_of_previous_month;
