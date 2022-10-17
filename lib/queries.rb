@@ -103,15 +103,19 @@ class Queries
 
     optional_timezone = @window == "1h" ? timezone_import : nil
 
+    query_end = page > 0 ? ", stop: -#{page * 10}m" : ""
+
     query = <<~QUERY
       from(bucket:"readings_last_hour")
-      |> range(start: -#{start}m)
+      |> range(start: -#{start}m#{query_end})
       |> filter(fn: (r) => r._measurement == "current" and r._field == "current")
+      |> aggregateWindow(every: 6s, fn: mean, createEmpty: false)
       |> yield(name: "current")
 
       from(bucket:"readings_last_hour")
-      |> range(start: -#{start}m)
+      |> range(start: -#{start}m#{query_end})
       |> filter(fn: (r) => r._measurement == "current" and r._field == "generation")
+      |> aggregateWindow(every: 6s, fn: mean, createEmpty: false)
       |> yield(name: "generation")
     QUERY
 
