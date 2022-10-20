@@ -106,17 +106,14 @@ class Queries
     query_end = page > 0 ? ", stop: -#{page * 10}m" : ""
 
     query = <<~QUERY
-      from(bucket:"readings_last_hour")
-      |> range(start: -#{start}m#{query_end})
-      |> filter(fn: (r) => r._measurement == "current" and r._field == "current")
-      |> aggregateWindow(every: 6s, fn: mean, createEmpty: false)
-      |> yield(name: "current")
-
-      from(bucket:"readings_last_hour")
-      |> range(start: -#{start}m#{query_end})
-      |> filter(fn: (r) => r._measurement == "current" and r._field == "generation")
-      |> aggregateWindow(every: 6s, fn: mean, createEmpty: false)
-      |> yield(name: "generation")
+      from(bucket: "readings_last_hour")
+        |> range(start: -#{start}m#{query_end})
+        |> filter(fn: (r) => r["_measurement"] == "current")
+        |> filter(fn: (r) => r["_field"] == "current" or r["_field"] == "generation")
+        |> aggregateWindow(every: 6s, fn: mean, createEmpty: false)
+        |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")
+        |> map(fn: (r) => ({ r with _value: r.current - r.generation }))
+        |> yield(name: "current")
     QUERY
 
     with_client do |client|
