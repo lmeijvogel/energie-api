@@ -167,7 +167,7 @@ class Queries
         from(bucket: "#{@bucket}")
         |> range(start: #{@start.iso8601}, stop: #{@stop.iso8601})
         |> filter(fn: (r) => r._measurement == "#{@field_name}")
-        |> window(every: #{@window}, createEmpty: true)
+        |> window(every: #{@window}, createEmpty: false)
         |> #{@aggregate_with}
         |> duplicate(column: "_start", as: "_time")
         |> window(every: inf)

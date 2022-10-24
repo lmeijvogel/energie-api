@@ -77,7 +77,7 @@ class App < Sinatra::Base
   end
 
   get '/api/:field/:period/:year/?:month?/?:day?' do
-    start, stop, window = get_query_range(params)
+    start, stop, window = get_query_range(params, params[:field])
 
     result = case params[:field]
     when "gas"
@@ -111,7 +111,9 @@ class App < Sinatra::Base
       end_of_yesterday = Time.new(yesterday.year, yesterday.month, yesterday.day, 23).to_datetime
       start_of_tomorrow = Time.new(tomorrow.year, tomorrow.month, tomorrow.day, 0).to_datetime
 
-      [end_of_yesterday, start_of_tomorrow, "1h"]
+      window = field_name == "generation" ? "15m" : "1h"
+
+      [end_of_yesterday, start_of_tomorrow, window]
     when "month"
       month = Date.new(Integer(params[:year]), Integer(params[:month]), 1)
 
