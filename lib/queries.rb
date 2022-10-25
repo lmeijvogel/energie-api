@@ -29,7 +29,6 @@ class Queries
       .take_difference
       .build
 
-    MyLogger.info query
     _perform_query(query)
   end
 
@@ -38,8 +37,6 @@ class Queries
       .range(start, stop, window)
       .aggregate_with("sum()")
       .build
-
-    MyLogger.info query
 
     _perform_query(query)
   end
@@ -51,7 +48,6 @@ class Queries
       .take_difference
       .build
 
-    MyLogger.info query
     _perform_query(query)
   end
 
