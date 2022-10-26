@@ -76,8 +76,10 @@ class App < Sinatra::Base
     result.to_json
   end
 
-  get '/api/:field/:period/:year/?:month?/?:day?' do
+  get '/api/:field/:period/:year/?:month?/?:day?/?:window?' do
     start, stop, window = get_query_range(params, params[:field])
+
+    window = params[:window] if params[:window]
 
     result = case params[:field]
     when "gas"
