@@ -111,7 +111,7 @@ class App < Sinatra::Base
       end_of_yesterday = Time.new(yesterday.year, yesterday.month, yesterday.day, 23).to_datetime
       start_of_tomorrow = Time.new(tomorrow.year, tomorrow.month, tomorrow.day, 0).to_datetime
 
-      window = field_name == "generation" ? "15m" : "1h"
+      window = "1h"
 
       [end_of_yesterday, start_of_tomorrow, window]
     when "month"
