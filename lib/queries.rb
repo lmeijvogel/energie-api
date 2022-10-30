@@ -97,8 +97,6 @@ class Queries
   def recent_power_usage(page:)
     start = (page + 1)*10
 
-    optional_timezone = @window == "1h" ? timezone_import : nil
-
     query_end = page > 0 ? ", stop: -#{page * 10}m" : ""
 
     query = <<~QUERY
@@ -154,11 +152,8 @@ class Queries
     end
 
     def build
-      optional_timezone = @window == "1h" ? timezone_import : nil
-
       <<~QUERY
         #{imports}
-        #{optional_timezone}
 
         from(bucket: "#{@bucket}")
         |> range(start: #{@start.iso8601}, stop: #{@stop.iso8601})
@@ -206,14 +201,6 @@ class Queries
         import "experimental"
         import "interpolate"
       IMPORTS
-    end
-
-    def timezone_import
-      <<~IMPORT
-        import "timezone"
-
-        option location = timezone.location(name: "Europe/Amsterdam")
-      IMPORT
     end
   end
 
