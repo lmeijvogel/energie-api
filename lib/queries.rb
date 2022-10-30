@@ -125,6 +125,32 @@ class Queries
     end
   end
 
+  def last_power_usage
+    query = <<~QUERY
+      from(bucket: "readings_last_hour")
+        |> range(start: -2s)
+        |> filter(fn: (r) => r["_measurement"] == "current" and (r["_field"] == "current" or r["_field"] == "generation"))
+        |> last()
+    QUERY
+
+    with_client do |client|
+      query_api = client.create_query_api
+
+      results = query_api.query(query: query)
+
+      values = results.map {|i, r| r.records[0].values }
+
+      current, time = values.find {|v| v["_field"] == "current" }.values_at("_value", "_time")
+
+      generation_entry = values.find {|v| v["_field"] == "generation" }
+      generation = generation_entry ? generation_entry["_value"] : 0
+
+      {
+        current: [[time, current - generation ]]
+      }
+    end
+  end
+
   def _perform_query(query)
     with_client do |client|
       query_api = client.create_query_api

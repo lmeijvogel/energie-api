@@ -68,6 +68,11 @@ class App < Sinatra::Base
     querier.recent_power_usage(page: page).to_json
   end
 
+  get '/api/stroom/last' do
+    page = params[:page].to_i
+    querier.last_power_usage.to_json
+  end
+
   get '/api/temperature/:location/:period/:year/?:month?/?:day?' do
     start, stop, window = get_query_range(params, "temperature")
 
