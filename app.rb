@@ -105,10 +105,10 @@ class App < Sinatra::Base
   def get_query_range(params, field_name = nil)
     case params[:period]
     when "day"
-      day = Time.new(Integer(params[:year]), Integer(params[:month], 10), Integer(params[:day]))
+      day = Date.new(Integer(params[:year]), Integer(params[:month], 10), Integer(params[:day]))
 
-      yesterday = day - 86400
-      tomorrow = day + 86400
+      yesterday = day - 1
+      tomorrow = day + 1
 
       end_of_yesterday = Time.new(yesterday.year, yesterday.month, yesterday.day, 23).to_datetime
       start_of_tomorrow = Time.new(tomorrow.year, tomorrow.month, tomorrow.day, 0).to_datetime
