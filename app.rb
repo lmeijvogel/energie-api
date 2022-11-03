@@ -25,21 +25,23 @@ class App < Sinatra::Base
 
 
   get '/api/:field/last_30_days' do
-    today = DateTime.now()
+    today = Date.today
 
-    start_of_period = today - 30;
+    MyLogger.info today
+    start_of_period = (today - 30).to_time
+    now = Time.now
 
     case params[:field]
     when "gas"
-      querier.gas_usage(start_of_period, today, "1h").to_json
+      querier.gas_usage(start_of_period, now, "1h").to_json
     when "stroom"
-      querier.stroom_usage(start_of_period, today, "1h").to_json
+      querier.stroom_usage(start_of_period, now, "1h").to_json
     when "generation"
-      querier.stroom_generation(start_of_period, today, "1h").to_json
+      querier.stroom_generation(start_of_period, now, "1h").to_json
     when "back_delivery"
-      querier.stroom_back_delivery(start_of_period, today, "1h").to_json
+      querier.stroom_back_delivery(start_of_period, now, "1h").to_json
     when "water"
-      querier.water_usage(start_of_period, today, "1h").to_json
+      querier.water_usage(start_of_period, now, "1h").to_json
     end
   end
 
