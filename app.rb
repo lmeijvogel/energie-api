@@ -66,8 +66,9 @@ class App < Sinatra::Base
   end
 
   get '/api/stroom/recent' do
-    page = params[:page].to_i
-    querier.recent_power_usage(page: page).to_json
+    minutes = params[:minutes].to_i
+
+    querier.recent_power_usage(minutes).to_json
   end
 
   get '/api/stroom/last' do

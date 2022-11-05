@@ -94,14 +94,10 @@ class Queries
     end
   end
 
-  def recent_power_usage(page:)
-    start = (page + 1)*10
-
-    query_end = page > 0 ? ", stop: -#{page * 10}m" : ""
-
+  def recent_power_usage(minutes = 10)
     query = <<~QUERY
       from(bucket: "readings_last_hour")
-        |> range(start: -#{start}m#{query_end})
+        |> range(start: -#{minutes}m)
         |> filter(fn: (r) => r["_measurement"] == "current")
         |> filter(fn: (r) => r["_field"] == "current" or r["_field"] == "generation")
         |> aggregateWindow(every: 6s, fn: mean, createEmpty: false)
