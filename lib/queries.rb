@@ -147,6 +147,35 @@ class Queries
     end
   end
 
+  def average_generation(end_date)
+    start_date = end_date - 7
+
+    query = <<~QUERY
+      import "date"
+      import "math"
+
+      from(bucket: "readings")
+        |> range(start: #{start_date.iso8601}, stop: #{end_date.iso8601})
+        |> filter(fn: (r) => r["_measurement"] == "opwekking")
+        |> filter(fn: (r) => r["_field"] == "opwekking")
+        |> filter(fn: (r) => math.remainder(x: float(v: date.minute(t: r["_time"])), y: 15.0) == 0.0)
+        |> map(fn: (r) => ({
+            r with hour: date.hour(t: r._time), minute: date.minute(t: r._time)
+        }))
+        |> group(columns: ["hour", "minute"], mode:"by")
+        |> mean(column: "_value")
+    QUERY
+
+    result = []
+
+    with_client do |client|
+      query_api = client.create_query_api
+      result = query_api.query(query: query)
+
+      result.map {|i, r| r.records[0].values.values_at("hour", "minute", "_value") }
+    end
+  end
+
   def _perform_query(query)
     with_client do |client|
       query_api = client.create_query_api

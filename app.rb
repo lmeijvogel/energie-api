@@ -81,7 +81,13 @@ class App < Sinatra::Base
 
     result = querier.temperature(params[:location], start, stop, window)
 
-    result.to_json
+    result.to_h.to_json
+  end
+
+  # Average over the week before 
+  get '/api/generation/average/day/:year/:month/:day' do
+    given_date = Date.new(Integer(params[:year]), Integer(params[:month]), Integer(params[:day]))
+    querier.average_generation(given_date - 1).to_json
   end
 
   get '/api/:field/:period/:year/?:month?/?:day?/?:window?' do
@@ -104,7 +110,6 @@ class App < Sinatra::Base
 
     result.to_json
   end
-
 
   def querier
     Queries.new(ENV.fetch("HOST"), ENV.fetch("ORG"), ENV.fetch("TOKEN"), ENV.fetch("USE_SSL", true) != "false")
