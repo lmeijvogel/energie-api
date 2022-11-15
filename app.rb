@@ -84,10 +84,11 @@ class App < Sinatra::Base
     result.to_h.to_json
   end
 
-  # Average over the week before 
-  get '/api/generation/average/day/:year/:month/:day' do
+  # Average over the week before
+  get '/api/generation/aggregate/:fn/day/:year/:month/:day' do
     given_date = Date.new(Integer(params[:year]), Integer(params[:month]), Integer(params[:day]))
-    querier.average_generation(given_date - 1).to_json
+
+    querier.aggregated_generation(given_date - 1, params[:fn]).to_json
   end
 
   get '/api/:field/:period/:year/?:month?/?:day?/?:window?' do

@@ -147,9 +147,13 @@ class Queries
     end
   end
 
-  def average_generation(end_date)
+  def aggregated_generation(end_date, fn)
     start_date = end_date - 7
 
+    aggregate_fn = case fn
+                   when "mean" then 'mean(column: "_value")'
+                   when "max" then 'max(column: "_value")'
+                   end
     query = <<~QUERY
       import "date"
       import "math"
@@ -163,9 +167,10 @@ class Queries
             r with hour: date.hour(t: r._time), minute: date.minute(t: r._time)
         }))
         |> group(columns: ["hour", "minute"], mode:"by")
-        |> mean(column: "_value")
+        |> #{aggregate_fn}
     QUERY
 
+    MyLogger.info  query
     result = []
 
     with_client do |client|
