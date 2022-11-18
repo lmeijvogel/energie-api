@@ -10,8 +10,6 @@ require "queries"
 Dotenv.load
 
 class App < Sinatra::Base
-  use Rack::CommonLogger
-
   set :logging, true
 
   configure :development do |config|
