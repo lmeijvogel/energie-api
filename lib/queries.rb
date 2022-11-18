@@ -170,7 +170,6 @@ class Queries
         |> #{aggregate_fn}
     QUERY
 
-    MyLogger.info  query
     result = []
 
     with_client do |client|
