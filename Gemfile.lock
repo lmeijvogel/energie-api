@@ -36,6 +36,7 @@ PLATFORMS
 
 DEPENDENCIES
   dotenv
+  eventmachine (~> 1.2)
   influxdb-client
   sinatra
   sinatra-reloader

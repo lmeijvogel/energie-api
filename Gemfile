@@ -7,3 +7,4 @@ gem "thin"
 
 gem "influxdb-client"
 
+gem "eventmachine", "~> 1.2"
