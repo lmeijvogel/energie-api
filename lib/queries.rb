@@ -74,17 +74,28 @@ class Queries
           |> range(start: #{start.iso8601}, stop: #{stop.iso8601})
           |> filter(fn: (r) => r["entity_id"] == "#{table}")
           |> filter(fn: (r) => r["_field"] == "value")
-          |> aggregateWindow(every: #{window}, fn: mean, createEmpty: false)
+          |> aggregateWindow(every: #{window}, fn: max, createEmpty: false)
           |> yield(name: "#{output_name}")
       QUERY
     end.join("\n");
+
+    query += <<~QUERY
+        from(bucket: "weather")
+          |> range(start: #{start.iso8601}, stop: #{stop.iso8601})
+          |> filter(fn: (r) => r["_measurement"] == "weather")
+          |> filter(fn: (r) => r["_field"] == "temperature")
+          // Values from KNMI are in tenths of degrees
+          |> map(fn: (r) => ({ r with _value: float(v: r._value) / 10.0 }))
+          |> aggregateWindow(every: #{window}, fn: max, createEmpty: false)
+          |> yield(name: "buiten")
+    QUERY
 
     with_client do |client|
       query_api = client.create_query_api
 
       results = query_api.query(query: query)
 
-      %i[huiskamer tuinkamer zolder].each_with_object({}) do |sensor_name, result|
+      %i[huiskamer tuinkamer zolder buiten].each_with_object({}) do |sensor_name, result|
         sensor_result = results.values.find do |table|
           table.columns.find {|c| c.label == "result" }.default_value == sensor_name.to_s
         end

@@ -145,11 +145,11 @@ class App < Sinatra::Base
     when "year"
       year = Integer(params[:year])
 
-      end_of_last_year = DateTime.new(year - 1, 12, 31)
-      start_of_next_year = DateTime.new(year + 1, 1, 1)
+      end_of_last_year = Date.new(year - 1, 12, 31)
+      start_of_next_year = Date.new(year + 1, 1, 1)
 
       window = field_name == "temperature" ? "10d" : "1mo";
-      [end_of_last_year, start_of_next_year,window]
+      [end_of_last_year, start_of_next_year, window]
     end
   end
 
