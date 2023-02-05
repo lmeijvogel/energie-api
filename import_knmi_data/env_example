@@ -1,0 +1,8 @@
+# Save this file as `.env`
+KNMI_API_KEY: xxxx
+WEERLIVE_API_KEY: xxxx
+
+INFLUXDB_HOST=xxxx
+INFLUXDB_ORG=xxxx
+INFLUXDB_BUCKET=xxxx
+INFLUXDB_TOKEN='xxxx'
