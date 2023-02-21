@@ -74,8 +74,12 @@ class App < Sinatra::Base
     querier.last_power_usage.to_json
   end
 
+  get '/api/water/current' do
+    querier.current_water_usage.to_json
+  end
+
   get '/api/temperature/:location/:period/:year/?:month?/?:day?' do
-    start, stop, window = get_query_range(params, "temperature")
+    start, stop, window = get_query_range(params, 7, "temperature")
 
     result = querier.temperature(params[:location], start, stop, window)
 
@@ -89,8 +93,9 @@ class App < Sinatra::Base
     querier.aggregated_generation(given_date - 1, params[:fn]).to_json
   end
 
+  # Single year/month/day graphs
   get '/api/:field/:period/:year/?:month?/?:day?/?:window?' do
-    start, stop, window = get_query_range(params, params[:field])
+    start, stop, window = get_query_range(params, 7, params[:field])
 
     window = params[:window] if params[:window]
 
@@ -110,46 +115,69 @@ class App < Sinatra::Base
     result.to_json
   end
 
+  get '/api/:field/:period/:year/?:month?/?:day?/:count/?:window?' do
+    start, stop, window = get_query_range(params, count.to_i || 1, params[:field])
+
+    window = params[:window] if params[:window]
+
+    result = case params[:field]
+    when "gas"
+      querier.gas_usage(start, stop, window)
+    when "stroom"
+      querier.stroom_usage(start, stop, window)
+    when "back_delivery"
+      querier.stroom_back_delivery(start, stop, window)
+    when "generation"
+      querier.stroom_generation(start, stop, window)
+    when "water"
+      querier.water_usage(start, stop, window)
+    end
+
+    result.to_json
+  end
+
+
   def querier
     Queries.new(ENV.fetch("HOST"), ENV.fetch("ORG"), ENV.fetch("TOKEN"), ENV.fetch("USE_SSL", true) != "false")
   end
 
-  def get_query_range(params, field_name = nil)
+  def get_query_range(params, count = 1, field_name = nil)
     case params[:period]
     when "day"
       day = Date.new(Integer(params[:year]), Integer(params[:month], 10), Integer(params[:day]))
 
       yesterday = day - 1
-      tomorrow = day + 1
+      day_after = day + count
 
       end_of_yesterday = Time.new(yesterday.year, yesterday.month, yesterday.day, 23).to_datetime
-      start_of_tomorrow = Time.new(tomorrow.year, tomorrow.month, tomorrow.day, 0).to_datetime
+      start_of_day_after = Time.new(day_after.year, day_after.month, day_after.day, 0).to_datetime
 
+      MyLogger.info "#{end_of_yesterday} - #{start_of_day_after}"
       window = "1h"
 
-      [end_of_yesterday, start_of_tomorrow, window]
+      [end_of_yesterday, start_of_day_after, window]
     when "month"
       month = Date.new(Integer(params[:year]), Integer(params[:month]), 1)
 
       day_before_month = month.prev_day
-      next_month = month.next_month
+      month_after = month >> count
 
       start_of_this_month = Time.new(month.year, month.month, month.day)
       end_of_previous_month = Time.new(day_before_month.year, day_before_month.month, day_before_month.day)
-      start_of_next_month = Time.new(next_month.year, next_month.month, next_month.day)
+      start_of_month_after = Time.new(month_after.year, month_after.month, month_after.day)
 
       window = field_name == "temperature" ? "1h" : "1d";
       start_of_period = field_name == "temperature" ? start_of_this_month : end_of_previous_month;
 
-      [start_of_period, start_of_next_month, window]
+      [start_of_period, start_of_month_after, window]
     when "year"
       year = Integer(params[:year])
 
       end_of_last_year = Date.new(year - 1, 12, 31)
-      start_of_next_year = Date.new(year + 1, 1, 1)
+      start_of_year_after = Date.new(year + count, 1, 1)
 
       window = field_name == "temperature" ? "10d" : "1mo";
-      [end_of_last_year, start_of_next_year, window]
+      [end_of_last_year, start_of_year_after, window]
     end
   end
 
