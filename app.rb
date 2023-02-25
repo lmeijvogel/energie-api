@@ -56,7 +56,8 @@ class App < Sinatra::Base
     when "back_delivery"
       querier.stroom_back_delivery(start_of_period, today, "1d").to_json
     when "generation"
-      querier.stroom_generation(start_of_period, today, "1d").to_json
+      # Generation is measured differently, so needs a different starting point
+      querier.stroom_generation(start_of_period + 1, today, "1d").to_json
     when "water"
       # Water is measured differently, so needs a different starting point
       querier.water_usage(start_of_period + 1, today, "1d").to_json
@@ -122,12 +123,17 @@ class App < Sinatra::Base
       yesterday = day - 1
       tomorrow = day + 1
 
-      end_of_yesterday = Time.new(yesterday.year, yesterday.month, yesterday.day, 23).to_datetime
+      start = if field_name == "generation"
+                day.to_datetime
+              else
+                Time.new(yesterday.year, yesterday.month, yesterday.day, 23).to_datetime
+              end
+
       start_of_tomorrow = Time.new(tomorrow.year, tomorrow.month, tomorrow.day, 0).to_datetime
 
       window = "1h"
 
-      [end_of_yesterday, start_of_tomorrow, window]
+      [start, start_of_tomorrow, window]
     when "month"
       month = Date.new(Integer(params[:year]), Integer(params[:month]), 1)
 
