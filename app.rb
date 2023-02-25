@@ -1,9 +1,17 @@
 require 'dotenv'
 
+require 'fileutils'
+
 require 'sinatra/base'
 require 'sinatra/reloader'
 
 $LOAD_PATH << File.join(__dir__, "lib")
+
+CACHE_DIR = File.join(__dir__, "tmp", "cache")
+
+if !File.directory?(CACHE_DIR)
+  FileUtils.mkdir_p(CACHE_DIR)
+end
 
 require "queries"
 
@@ -25,7 +33,6 @@ class App < Sinatra::Base
   get '/api/:field/last_30_days' do
     today = Date.today
 
-    MyLogger.info today
     start_of_period = (today - 30).to_time
     now = Time.now
 
@@ -76,11 +83,13 @@ class App < Sinatra::Base
   end
 
   get '/api/temperature/:location/:period/:year/?:month?/?:day?' do
-    start, stop, window = get_query_range(params, "temperature")
+    with_cache("temperature", params) do
+      start, stop, window = get_query_range(params, "temperature")
 
-    result = querier.temperature(params[:location], start, stop, window)
+      result = querier.temperature(params[:location], start, stop, window)
 
-    result.to_h.to_json
+      result.to_h.to_json
+    end
   end
 
   # Average over the week before
@@ -91,24 +100,71 @@ class App < Sinatra::Base
   end
 
   get '/api/:field/:period/:year/?:month?/?:day?/?:window?' do
-    start, stop, window = get_query_range(params, params[:field])
+    with_cache("period", params) do
+      start, stop, window = get_query_range(params, params[:field])
 
-    window = params[:window] if params[:window]
+      window = params[:window] if params[:window]
 
-    result = case params[:field]
-    when "gas"
-      querier.gas_usage(start, stop, window)
-    when "stroom"
-      querier.stroom_usage(start, stop, window)
-    when "back_delivery"
-      querier.stroom_back_delivery(start, stop, window)
-    when "generation"
-      querier.stroom_generation(start, stop, window)
-    when "water"
-      querier.water_usage(start, stop, window)
+      result = case params[:field]
+      when "gas"
+        querier.gas_usage(start, stop, window)
+      when "stroom"
+        querier.stroom_usage(start, stop, window)
+      when "back_delivery"
+        querier.stroom_back_delivery(start, stop, window)
+      when "generation"
+        querier.stroom_generation(start, stop, window)
+      when "water"
+        querier.water_usage(start, stop, window)
+      end
+
+      result.to_json
+    end
+  end
+
+  def with_cache(cache_category, params)
+    return yield if current_period?(params)
+
+    cache_key = params.map do |key, value|
+      "#{sanitize_for_filename(key)}_#{sanitize_for_filename(value)}"
+    end.join("__")
+
+    filename = File.join(CACHE_DIR, "#{cache_category}___#{cache_key}.json")
+
+    if File.exist?(filename)
+      return File.read(filename)
     end
 
-    result.to_json
+    value = yield
+
+    File.open(filename, "w") do |file|
+      file.write(value)
+    end
+
+    return value
+  end
+
+  def current_period?(params)
+    year = params[:year].to_i
+    month = params[:month].to_i
+    day = params[:day].to_i
+
+    today = Date.today
+
+    case params[:period]
+    when "day"
+      return Date.new(year, month, day) == today
+    when "month"
+      return Date.new(year, month, 1) == Date.new(today.year, today.month, 1)
+    when "year"
+      return Date.new(year, 1, 1) == Date.new(today.year, 1, 1)
+    end
+
+    false
+  end
+
+  def sanitize_for_filename(input)
+    input.to_s.gsub(/[^A-Za-z0-9\-.]/, "-")
   end
 
   def querier
