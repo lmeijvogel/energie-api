@@ -187,7 +187,7 @@ class App < Sinatra::Base
   end
 
   def querier
-    Queries.new(ENV.fetch("HOST"), ENV.fetch("ORG"), ENV.fetch("TOKEN"), ENV.fetch("USE_SSL", true) != "false")
+    Queries.new(ENV.fetch("INFLUXDB_HOST"), ENV.fetch("INFLUXDB_ORG"), ENV.fetch("INFLUXDB_TOKEN"), ENV.fetch("INFLUXDB_USE_SSL", true) != "false")
   end
 
   def get_query_range(params, field_name = nil)
