@@ -1,6 +1,8 @@
 source "https://rubygems.org"
 
 gem "dotenv"
+gem "redis"
+
 gem "sinatra"
 gem "sinatra-reloader"
 gem "thin"

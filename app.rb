@@ -14,6 +14,8 @@ if !File.directory?(CACHE_DIR)
 end
 
 require "queries"
+require "water_measurement_store"
+require "current_water_usage_calculator"
 
 Dotenv.load
 
@@ -77,9 +79,24 @@ class App < Sinatra::Base
     querier.recent_power_usage(minutes).to_json
   end
 
-  get '/api/stroom/last' do
-    page = params[:page].to_i
-    querier.last_power_usage.to_json
+  get '/api/water/recent' do
+    minutes = params[:minutes].to_i
+
+    querier.recent_water_usage(60).to_json
+  end
+
+  get '/api/usage/last' do
+    water_measurement_store = WaterMeasurementStore.new(redis_host: ENV.fetch("REDIS_HOST"))
+
+    last_water_ticks_redis = water_measurement_store.ticks
+    last_water_ticks = last_water_ticks_redis.map { |str| DateTime.parse(str) }
+
+    water_current = CurrentWaterUsageCalculator.calculate(last_water_ticks)
+
+    {
+          current: querier.last_power_usage.to_json,
+          water: water_current
+    }.to_json
   end
 
   get '/api/temperature/:location/:period/:year/?:month?/?:day?' do
@@ -94,9 +111,11 @@ class App < Sinatra::Base
 
   # Average over the week before
   get '/api/generation/aggregate/:fn/day/:year/:month/:day' do
-    given_date = Date.new(Integer(params[:year]), Integer(params[:month]), Integer(params[:day]))
+    with_cache("generation_aggregate_#{params[:fn]}", params) do
+      given_date = Date.new(Integer(params[:year]), Integer(params[:month]), Integer(params[:day]))
 
-    querier.aggregated_generation(given_date - 1, params[:fn]).to_json
+      querier.aggregated_generation(given_date - 1, params[:fn]).to_json
+    end
   end
 
   get '/api/:field/:period/:year/?:month?/?:day?/?:window?' do

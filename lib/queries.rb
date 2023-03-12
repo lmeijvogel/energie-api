@@ -105,7 +105,7 @@ class Queries
     end
   end
 
-  def recent_power_usage(minutes = 10)
+  def recent_power_usage(minutes = 60)
     query = <<~QUERY
       from(bucket: "readings_last_hour")
         |> range(start: -#{minutes}m)
@@ -132,6 +132,54 @@ class Queries
     end
   end
 
+  def recent_water_usage(minutes = 60)
+    # Since water usage is less frequent than power usage,
+    # we want to show the last hour where water was used,
+    # otherwise the graph will be empty most of the day.
+    #
+    # This does require some extra work: Getting the last
+    # stored water row. Below I first get that and with some
+    # conversion get the right range.
+    #
+    # I got the idea here: https://docs.influxdata.com/influxdb/v2.2/query-data/flux/scalar-values/
+    query = <<~QUERY
+      import "date"
+
+      // Define a helper function to extract a row as a record
+      getRow = (tables=<-, field, idx=0) => {
+          extract = tables
+              |> findRecord(fn: (key) => true, idx: idx)
+
+          return extract
+      }
+
+
+      getLast = () => {
+        _last = from(bucket: "readings")
+              |> range(start: -1d)
+              |> filter(fn: (r) => r["_measurement"] == "water")
+              |> filter(fn: (r) => r["_field"] == "water")
+              |> last()
+              |> getRow(field: "_time")
+
+        return _last
+      }
+
+      // A lot of work just to get the last row with values instead
+      // of as a stream.
+      last = getLast()
+
+      from(bucket: "readings")
+        |> range(start: date.sub(from: last["_time"], d: #{minutes}m), stop: last["_time"])
+        |> filter(fn: (r) => r["_measurement"] == "water")
+        |> filter(fn: (r) => r["_field"] == "water")
+        |> aggregateWindow(every: 1m, fn: count, createEmpty: true)
+        |> yield(name: "count")
+    QUERY
+
+    _perform_query(query)
+  end
+
   def last_power_usage
     query = <<~QUERY
       from(bucket: "readings_last_hour")
@@ -152,9 +200,7 @@ class Queries
       generation_entry = values.find {|v| v["_field"] == "generation" }
       generation = generation_entry ? generation_entry["_value"] : 0
 
-      {
-        current: [[time, current - generation ]]
-      }
+      current - generation
     end
   end
 
