@@ -100,13 +100,11 @@ class App < Sinatra::Base
   end
 
   get '/api/temperature/:location/:period/:year/?:month?/?:day?' do
-    with_cache("temperature", params) do
-      start, stop, window = get_query_range(params, "temperature")
+    start, stop, window = get_query_range(params, "temperature")
 
-      result = querier.temperature(params[:location], start, stop, window)
+    result = querier.temperature(params[:location], start, stop, window)
 
-      result.to_h.to_json
-    end
+    result.to_h.to_json
   end
 
   # Average over the week before
