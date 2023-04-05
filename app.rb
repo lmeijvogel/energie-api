@@ -32,10 +32,10 @@ class App < Sinatra::Base
   end
 
 
-  get '/api/:field/last_30_days' do
+  get '/api/:field/hourly/:days' do
     today = Date.today
 
-    start_of_period = (today - 30).to_time
+    start_of_period = (today - Integer(params[:days])).to_time
     now = Time.now
 
     case params[:field]
