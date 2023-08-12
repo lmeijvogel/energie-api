@@ -12,11 +12,28 @@ class Queries
   end
 
   def gas_usage(start, stop, window)
-    query = QueryBuilder.new("readings", "gas")
-      .range(start, stop, window)
-      .aggregate_with("max()")
-      .take_difference
-      .build
+    query = <<~QUERY
+      import "date"
+      import "experimental"
+      import "interpolate"
+
+      prefix_query = from(bucket: "readings")
+        |> range(start: date.sub(d: 24h, from: #{start.iso8601}), stop: #{start.iso8601})
+        |> filter(fn: (r) => r._measurement == "gas")
+        |> last()
+
+      data_range = from(bucket: "readings")
+        |> range(start: #{start.iso8601}, stop: #{stop.iso8601})
+        |> filter(fn: (r) => r._measurement == "gas")
+        |> window(every: #{window}, createEmpty: false)
+        |> max()
+        |> duplicate(column: "_start", as: "_time")
+        |> window(every: inf)
+
+      union(tables: [prefix_query, data_range])
+        |> group(columns:["_field"])
+        |> difference()
+    QUERY
 
     # Do not interpolate, since missing measurements regularly occur: Only changes in gas usage
     # are logged.
