@@ -72,7 +72,7 @@ class Queries
   def water_usage(start, stop, window)
     query = QueryBuilder.new("readings", "water")
       .range(start, stop, window)
-      .aggregate_with("count()")
+      .aggregate_with("sum()")
       .build
 
     _perform_query(query)
