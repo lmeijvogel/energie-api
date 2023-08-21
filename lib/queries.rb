@@ -191,7 +191,7 @@ class Queries
         |> range(start: date.sub(from: last["_time"], d: #{minutes}m), stop: last["_time"])
         |> filter(fn: (r) => r["_measurement"] == "water")
         |> filter(fn: (r) => r["_field"] == "water")
-        |> aggregateWindow(every: 1m, fn: count, createEmpty: true)
+        |> aggregateWindow(every: 1m, fn: sum, createEmpty: true)
         |> yield(name: "count")
     QUERY
 
