@@ -1,6 +1,6 @@
 FROM ruby:3.1.2-alpine3.16
 
-RUN apk add --no-cache tini g++ gcc make musl-dev tzdata
+RUN apk add --no-cache tini g++ gcc make musl-dev tzdata postgresql-dev
 
 ENV TZ=Europe/Amsterdam
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone

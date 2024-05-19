@@ -2,6 +2,8 @@ require 'dotenv'
 
 require 'fileutils'
 
+require 'pg'
+
 require 'sinatra/base'
 require 'sinatra/reloader'
 
@@ -13,7 +15,6 @@ if !File.directory?(CACHE_DIR)
   FileUtils.mkdir_p(CACHE_DIR)
 end
 
-require "queries"
 require "water_measurement_store"
 require "current_water_usage_calculator"
 
@@ -36,53 +37,75 @@ class App < Sinatra::Base
     today = Date.today
 
     start_of_period = (today - Integer(params[:days])).to_time
-    now = Time.now
 
-    case params[:field]
-    when "gas"
-      querier.gas_usage(start_of_period, now, "1h").to_json
-    when "stroom"
-      querier.stroom_usage(start_of_period, now, "1h").to_json
-    when "generation"
-      querier.stroom_generation(start_of_period, now, "1h").to_json
-    when "back_delivery"
-      querier.stroom_back_delivery(start_of_period, now, "1h").to_json
-    when "water"
-      querier.water_usage(start_of_period, now, "1h").to_json
-    end
+    perform_heatmap_query(params[:field], start_of_period, "1 hour")
   end
 
   get '/api/:field/last_year' do
-    today = DateTime.now()
+    today = Date.today
 
     start_of_period = (DateTime.new(today.year - 1, today.month, 1)) - 1;
 
-    case params[:field]
-    when "gas"
-      querier.gas_usage(start_of_period, today, "1d").to_json
-    when "stroom"
-      querier.stroom_usage(start_of_period, today, "1d").to_json
-    when "back_delivery"
-      querier.stroom_back_delivery(start_of_period, today, "1d").to_json
-    when "generation"
-      # Generation is measured differently, so needs a different starting point
-      querier.stroom_generation(start_of_period + 1, today, "1d").to_json
-    when "water"
-      # Water is measured differently, so needs a different starting point
-      querier.water_usage(start_of_period + 1, today, "1d").to_json
+    perform_heatmap_query(params[:field], start_of_period, "1 day")
+  end
+
+  def perform_heatmap_query(field_in_params, start_of_period, bucket_size)
+    now = Time.now
+
+    table_name, field = get_table_name_and_field(field_in_params)
+
+    result = with_pg do |connection|
+      query = case table_name
+      when "gas", "power"
+        query_for_cumulative_source(table_name, field)
+      when "generation", "water"
+        query_for_usage_source(table_name, field)
+      end
+
+      connection.exec(query, [start_of_period, now, bucket_size])
     end
+
+    postprocessing = case field
+                     when "cumulative_total_dm3", "cumulative_from_network_wh", "cumulative_to_network_wh" then proc {|usage| usage.to_f / 1000 }
+                     when "usage_dl" then proc {|usage| usage.to_f / 10 }
+                     else proc { |u| u.to_f }
+                     end
+
+    result.select {|entry| entry["usage"] != nil}.map {|entry| [entry["bucket"], postprocessing.(entry["usage"])] }.to_json
   end
 
   get '/api/stroom/recent' do
-    minutes = params[:minutes].to_i
+    with_redis do |redis|
+      data = redis.lrange("recent_current_measurements", 0, -1)
 
-    querier.recent_power_usage(minutes).to_json
+      data.map {|row| JSON.parse(row) }.to_json
+    end
   end
 
   get '/api/water/recent' do
     minutes = params[:minutes].to_i
 
-    querier.recent_water_usage(60).to_json
+    water_measurement_store = WaterMeasurementStore.new(redis_host: ENV.fetch("REDIS_HOST"))
+    last_tick = water_measurement_store.ticks[0] || Time.now
+
+    with_pg do |connection|
+      query = <<~QUERY
+        SELECT
+          time_bucket('1 minute'::interval, created, 'Europe/Amsterdam') AS bucket,
+          SUM(usage_dl) AS usage_dl
+          FROM water WHERE created >
+            (SELECT created FROM water ORDER BY created DESC LIMIT 1) - $1::interval
+          GROUP BY bucket;
+      QUERY
+
+      interval = "#{minutes} minutes"
+      result = connection.exec(query, [interval])
+      result.select {|entry| entry["usage_dl"] != nil}.map do |entry|
+        [
+          entry["bucket"], entry["usage_dl"].to_f / 10
+        ]
+      end.to_json
+    end
   end
 
   get '/api/usage/last' do
@@ -93,18 +116,40 @@ class App < Sinatra::Base
 
     water_current = CurrentWaterUsageCalculator.calculate(last_water_ticks)
 
+    last_power_usage_w = with_redis do |redis|
+      redis.get("last_current_measurement").to_f / 1000
+    end
+
     {
-          current: querier.last_power_usage.to_json,
+          current: last_power_usage_w,
           water: water_current
     }.to_json
   end
 
   get '/api/temperature/:location/:period/:year/?:month?/?:day?' do
-    start, stop, window = get_query_range(params, "temperature")
+    start, stop, bucket_size = get_query_range(params, "temperature")
 
-    result = querier.temperature(params[:location], start, stop, window)
+    with_pg do |connection|
+      query = <<~QUERY
+                  SELECT time_bucket($3::interval, created, 'Europe/Amsterdam') AS bucket,
+                    MAX(huiskamer) AS huiskamer,
+                    MAX(tuinkamer) AS tuinkamer,
+                    MAX(zolder) AS zolder
+                  FROM temperatures
+                  WHERE $1::timestamp < created AND created < $2::timestamp
+                  GROUP BY bucket ORDER BY bucket
+      QUERY
+      result = connection.exec(query, [start, stop, bucket_size])
 
-    result.to_h.to_json
+      result.map do |entry|
+        {
+          timestamp: entry["bucket"],
+          huiskamer: entry["huiskamer"].to_f / 10,
+          tuinkamer: entry["tuinkamer"].to_f / 10,
+          zolder: entry["zolder"].to_f / 10
+        }
+      end.to_json
+    end
   end
 
   # Average over the week before
@@ -112,31 +157,115 @@ class App < Sinatra::Base
     with_cache("generation_aggregate_#{params[:fn]}", params) do
       given_date = Date.new(Integer(params[:year]), Integer(params[:month]), Integer(params[:day]))
 
-      querier.aggregated_generation(given_date - 1, params[:fn]).to_json
+      start = given_date - 7
+
+      table_name, field = get_table_name_and_field("generation")
+
+      fn = case params[:fn]
+                         when "max" then "MAX"
+                         when "mean" then "AVG"
+                         end
+
+      query = <<~QUERY
+                  WITH all_measurements AS (
+                  SELECT time_bucket($3::interval, created, 'Europe/Amsterdam') AS bucket,
+                    #{fn}(#{field}) AS usage
+                  FROM #{table_name}
+                  WHERE $1::timestamp < created AND created < $2::timestamp
+                  GROUP BY bucket ORDER BY bucket)
+
+                  SELECT EXTRACT(HOUR from bucket) as hour, EXTRACT(MINUTE from bucket) as minute, #{fn}(usage) as usage
+                  FROM all_measurements
+                  GROUP BY hour, minute
+                  ORDER BY hour, minute
+      QUERY
+
+
+      with_pg do |connection|
+        result = connection.exec(query, [start, given_date, "15 minutes"])
+
+        result.select {|entry| entry["usage"] != nil}.map {|entry| [entry["hour"].to_i, entry["minute"].to_i, entry["usage"].to_i] }.to_json
+      end
     end
   end
 
   get '/api/:field/:period/:year/?:month?/?:day?/?:window?' do
     with_cache("period", params) do
-      start, stop, window = get_query_range(params, params[:field])
+      start, stop, bucket_size = get_query_range(params, params[:field])
 
-      window = params[:window] if params[:window]
+      bucket_size = params[:window] if params[:window]
 
-      result = case params[:field]
-      when "gas"
-        querier.gas_usage(start, stop, window)
-      when "stroom"
-        querier.stroom_usage(start, stop, window)
-      when "back_delivery"
-        querier.stroom_back_delivery(start, stop, window)
-      when "generation"
-        querier.stroom_generation(start, stop, window)
-      when "water"
-        querier.water_usage(start, stop, window)
+      table_name, field = get_table_name_and_field(params[:field])
+
+      with_pg do |connection|
+        query = if table_name == "gas" || table_name == "power"
+                  query_for_cumulative_source(table_name, field)
+                else
+                  query_for_usage_source(table_name, field)
+                end
+
+        result = connection.exec(query, [start, stop, bucket_size])
+
+        postprocessing = case field
+                         when "cumulative_total_dm3", "cumulative_from_network_wh", "cumulative_to_network_wh" then proc {|usage| usage.to_f / 1000 }
+                         when "usage_dl" then proc {|usage| usage.to_f / 10 }
+                         else proc { |u| u.to_f }
+                         end
+
+        result.select {|entry| entry["usage"] != nil}.map {|entry| [entry["bucket"], postprocessing.(entry["usage"])] }.to_json
       end
-
-      result.to_json
     end
+  end
+
+  def with_pg
+    PG::Connection.open(host: ENV.fetch("POSTGRES_HOST"), dbname: ENV.fetch("POSTGRES_DATABASE"), user: ENV.fetch("POSTGRES_USER"), password: ENV.fetch("POSTGRES_PASSWORD")) do |connection|
+      yield connection
+    end
+  end
+
+  def with_redis
+    redis = Redis.new(host: ENV.fetch("REDIS_HOST"))
+
+    yield redis
+  ensure
+    redis.close
+  end
+
+  def query_for_cumulative_source(table_name, field)
+    <<~QUERY
+                  WITH bucketed as (
+                    SELECT
+                      time_bucket($3::interval, created, 'Europe/Amsterdam') as bucket,
+                      counter_agg(created, #{field})
+                    FROM #{table_name}
+                    WHERE $1::timestamp < created AND created < $2::timestamp
+
+                    GROUP BY bucket
+                    ORDER BY bucket)
+
+                  SELECT
+                    bucket,
+                    interpolated_delta(
+                      counter_agg,
+                      bucket,
+                      $3::interval,
+                      lag(counter_agg) OVER ordered_meter,
+                      lead(counter_agg) OVER ordered_meter) as usage
+                  FROM bucketed
+                  WINDOW ordered_meter AS (ORDER BY bucket)
+                  ORDER BY bucket;
+
+    QUERY
+  end
+
+  def query_for_usage_source(table_name, field)
+    <<~QUERY
+                  SELECT time_bucket($3::interval, created, 'Europe/Amsterdam') AS bucket,
+                    SUM(#{field}) AS usage
+                  FROM #{table_name}
+                  WHERE $1::timestamp < created AND created < $2::timestamp
+                  GROUP BY bucket ORDER BY bucket
+    QUERY
   end
 
   def with_cache(cache_category, params)
@@ -185,50 +314,48 @@ class App < Sinatra::Base
   end
 
   def querier
-    Queries.new(ENV.fetch("INFLUXDB_HOST"), ENV.fetch("INFLUXDB_ORG"), ENV.fetch("INFLUXDB_TOKEN"), ENV.fetch("INFLUXDB_USE_SSL", true) != "false")
+    Queries.new(ENV.fetch("INFLUXDB_HOST"), ENV.fetch("INFLUXDB_ORG"), ENV.fetch("INFLUXDB_BUCKET"), ENV.fetch("INFLUXDB_TOKEN"), ENV.fetch("INFLUXDB_USE_SSL", true) != "false")
   end
 
   def get_query_range(params, field_name = nil)
+    one_second = 1.0 / 24 / 60 / 60
+
     case params[:period]
     when "day"
-      day = Date.new(Integer(params[:year]), Integer(params[:month], 10), Integer(params[:day]))
+      start_of_today = DateTime.new(Integer(params[:year]), Integer(params[:month], 10), Integer(params[:day], 10))
+      start_of_tomorrow = start_of_today + 1
 
-      yesterday = day - 1
-      tomorrow = day + 1
+      end_of_today = start_of_tomorrow - one_second
 
-      start = if field_name == "generation"
-                day.to_datetime
-              else
-                Time.new(yesterday.year, yesterday.month, yesterday.day, 23).to_datetime
-              end
-
-      start_of_tomorrow = Time.new(tomorrow.year, tomorrow.month, tomorrow.day, 0).to_datetime
-
-      window = "1h"
-
-      [start, start_of_tomorrow, window]
+      [start_of_today, end_of_today, "1 hour"]
     when "month"
-      month = Date.new(Integer(params[:year]), Integer(params[:month]), 1)
+      start_of_this_month = DateTime.new(Integer(params[:year]), Integer(params[:month]), 1)
+      start_of_next_month = start_of_this_month >> 1
 
-      day_before_month = month.prev_day
-      next_month = month.next_month
+      end_of_this_month = start_of_next_month - one_second
 
-      start_of_this_month = Time.new(month.year, month.month, month.day)
-      end_of_previous_month = Time.new(day_before_month.year, day_before_month.month, day_before_month.day)
-      start_of_next_month = Time.new(next_month.year, next_month.month, next_month.day)
+      bucket_size = field_name == "temperature" ? "1 hour" : "1 day";
 
-      window = field_name == "temperature" ? "1h" : "1d";
-      start_of_period = field_name == "temperature" ? start_of_this_month : end_of_previous_month;
-
-      [start_of_period, start_of_next_month, window]
+      [start_of_this_month, end_of_this_month, bucket_size]
     when "year"
       year = Integer(params[:year])
 
-      end_of_last_year = Date.new(year - 1, 12, 31)
-      start_of_next_year = Date.new(year + 1, 1, 1)
+      start_of_year = DateTime.new(year, 1, 1)
+      end_of_year = DateTime.new(year, 12, 31, 23, 59, 59)
 
-      window = field_name == "temperature" ? "10d" : "1mo";
-      [end_of_last_year, start_of_next_year, window]
+      bucket_size = field_name == "temperature" ? "10 days" : "1 month";
+      [start_of_year, end_of_year, bucket_size]
+    end
+  end
+
+
+  def get_table_name_and_field(field_in_params)
+    case field_in_params
+    when "gas" then ["gas", "cumulative_total_dm3"]
+    when "water" then ["water", "usage_dl"]
+    when "stroom" then ["power", "cumulative_from_network_wh"]
+    when "back_delivery" then ["power", "cumulative_to_network_wh"]
+    when "generation" then ["generation", "generation_wh"]
     end
   end
 
