@@ -1,10 +1,12 @@
 version: "3"
 
 services:
-  api:
+  energie-api:
     build: .
     environment:
       - APP_ENV=production
+    volumes:
+      - ./tmp/cache:/app/tmp/cache
     ports:
       - "4567:4567"
     restart: unless-stopped
