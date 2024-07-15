@@ -95,7 +95,7 @@ class App < Sinatra::Base
           SUM(usage_dl) AS usage_dl
           FROM water WHERE created >
             (SELECT created FROM water ORDER BY created DESC LIMIT 1) - $1::interval
-          GROUP BY bucket;
+          GROUP BY bucket ORDER BY bucket;
       QUERY
 
       interval = "#{minutes} minutes"
