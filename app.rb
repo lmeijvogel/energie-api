@@ -52,14 +52,14 @@ class App < Sinatra::Base
   def perform_heatmap_query(field_in_params, start_of_period, bucket_size)
     now = Time.now
 
-    table_name, field = get_table_name_and_field(field_in_params)
+    table_name, field, ca_view, ca_field = get_table_name_and_field(field_in_params)
 
     result = with_pg do |connection|
       query = case table_name
       when "gas", "power"
-        query_for_cumulative_source(table_name, field)
+        query_for_cumulative_source(ca_view, ca_field)
       when "generation", "water"
-        query_for_usage_source(table_name, field)
+        query_for_usage_source(ca_view, field)
       end
 
       connection.exec(query, [start_of_period, now, bucket_size])
@@ -131,12 +131,12 @@ class App < Sinatra::Base
 
     with_pg do |connection|
       query = <<~QUERY
-                  SELECT time_bucket($3::interval, created, 'Europe/Amsterdam') AS bucket,
+                  SELECT time_bucket($3::interval, bucket, 'Europe/Amsterdam') AS bucket,
                     MAX(huiskamer) AS huiskamer,
                     MAX(tuinkamer) AS tuinkamer,
                     MAX(zolder) AS zolder
-                  FROM temperatures
-                  WHERE $1::timestamp < created AND created < $2::timestamp
+                  FROM temperatures_hourly_ca
+                  WHERE $1::timestamp < bucket AND bucket < $2::timestamp
                   GROUP BY bucket ORDER BY bucket
       QUERY
       result = connection.exec(query, [start, stop, bucket_size])
@@ -195,13 +195,13 @@ class App < Sinatra::Base
 
       bucket_size = params[:window] if params[:window]
 
-      table_name, field = get_table_name_and_field(params[:field])
+      table_name, field, ca_view, ca_field = get_table_name_and_field(params[:field])
 
       with_pg do |connection|
         query = if table_name == "gas" || table_name == "power"
-                  query_for_cumulative_source(table_name, field)
+                  query_for_cumulative_source(ca_view, ca_field)
                 else
-                  query_for_usage_source(table_name, field)
+                  query_for_usage_source(ca_view, field)
                 end
 
         result = connection.exec(query, [start, stop, bucket_size])
@@ -231,17 +231,16 @@ class App < Sinatra::Base
     redis.close
   end
 
-  def query_for_cumulative_source(table_name, field)
+  def query_for_cumulative_source(ca_view, ca_field)
     <<~QUERY
-                  WITH bucketed as (
+                  WITH bucketed AS (
                     SELECT
-                      time_bucket($3::interval, created, 'Europe/Amsterdam') as bucket,
-                      counter_agg(created, #{field})
-                    FROM #{table_name}
-                    WHERE $1::timestamp < created AND created < $2::timestamp
-
-                    GROUP BY bucket
-                    ORDER BY bucket)
+                      time_bucket($3::interval, bucket, 'Europe/Amsterdam') AS bucket,
+                      rollup(#{ca_field}) AS counter_agg
+                    FROM #{ca_view}
+                    WHERE $1::timestamp < bucket AND bucket < $2::timestamp
+                    GROUP BY 1
+                    ORDER BY 1)
 
                   SELECT
                     bucket,
@@ -250,7 +249,7 @@ class App < Sinatra::Base
                       bucket,
                       $3::interval,
                       lag(counter_agg) OVER ordered_meter,
-                      lead(counter_agg) OVER ordered_meter) as usage
+                      lead(counter_agg) OVER ordered_meter) AS usage
                   FROM bucketed
                   WINDOW ordered_meter AS (ORDER BY bucket)
                   ORDER BY bucket;
@@ -258,12 +257,12 @@ class App < Sinatra::Base
     QUERY
   end
 
-  def query_for_usage_source(table_name, field)
+  def query_for_usage_source(ca_view, field)
     <<~QUERY
-                  SELECT time_bucket($3::interval, created, 'Europe/Amsterdam') AS bucket,
+                  SELECT time_bucket($3::interval, bucket, 'Europe/Amsterdam') AS bucket,
                     SUM(#{field}) AS usage
-                  FROM #{table_name}
-                  WHERE $1::timestamp < created AND created < $2::timestamp
+                  FROM #{ca_view}
+                  WHERE $1::timestamp < bucket AND bucket < $2::timestamp
                   GROUP BY bucket ORDER BY bucket
     QUERY
   end
@@ -351,11 +350,11 @@ class App < Sinatra::Base
 
   def get_table_name_and_field(field_in_params)
     case field_in_params
-    when "gas" then ["gas", "cumulative_total_dm3"]
-    when "water" then ["water", "usage_dl"]
-    when "stroom" then ["power", "cumulative_from_network_wh"]
-    when "back_delivery" then ["power", "cumulative_to_network_wh"]
-    when "generation" then ["generation", "generation_wh"]
+    when "gas"           then ["gas",        "cumulative_total_dm3",       "gas_hourly_ca",        "total_agg"]
+    when "water"         then ["water",       "usage_dl",                   "water_hourly_ca",      "usage_dl"]
+    when "stroom"        then ["power",       "cumulative_from_network_wh", "power_hourly_ca",      "from_network_agg"]
+    when "back_delivery" then ["power",       "cumulative_to_network_wh",   "power_hourly_ca",      "to_network_agg"]
+    when "generation"    then ["generation",  "generation_wh",              "generation_hourly_ca", "generation_wh"]
     end
   end
 
