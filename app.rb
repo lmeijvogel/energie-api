@@ -254,7 +254,7 @@ class App < Sinatra::Base
                       time_bucket($3::interval, bucket, 'Europe/Amsterdam') AS bucket,
                       rollup(#{ca_field}) AS counter_agg
                     FROM #{ca_view}
-                    WHERE $1::timestamp < bucket AND bucket < $2::timestamp
+                    WHERE $1::timestamp <= bucket AND bucket < $2::timestamp
                     GROUP BY 1
                     ORDER BY 1)
 
@@ -278,7 +278,7 @@ class App < Sinatra::Base
                   SELECT time_bucket($3::interval, bucket, 'Europe/Amsterdam') AS bucket,
                     SUM(#{field}) AS usage
                   FROM #{ca_view}
-                  WHERE $1::timestamp < bucket AND bucket < $2::timestamp
+                  WHERE $1::timestamp <= bucket AND bucket < $2::timestamp
                   GROUP BY bucket ORDER BY bucket
     QUERY
   end
