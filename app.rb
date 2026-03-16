@@ -71,7 +71,9 @@ class App < Sinatra::Base
                      else proc { |u| u.to_f }
                      end
 
-    result.select {|entry| entry["usage"] != nil}.map {|entry| [entry["bucket"], postprocessing.(entry["usage"])] }.to_json
+    pairs = result.select {|entry| entry["usage"] != nil}
+                  .map {|entry| [entry["bucket"], postprocessing.(entry["usage"])] }
+    suppress_spikes(pairs).to_json
   end
 
   get '/api/stroom/recent' do
@@ -212,9 +214,23 @@ class App < Sinatra::Base
                          else proc { |u| u.to_f }
                          end
 
-        result.select {|entry| entry["usage"] != nil}.map {|entry| [entry["bucket"], postprocessing.(entry["usage"])] }.to_json
+        pairs = result.select {|entry| entry["usage"] != nil}
+                      .map {|entry| [entry["bucket"], postprocessing.(entry["usage"])] }
+        suppress_spikes(pairs).to_json
       end
     end
+  end
+
+  def suppress_spikes(pairs, factor: 5)
+    return pairs if pairs.length < 3
+
+    values = pairs.map(&:last)
+    sorted = values.sort
+    median = sorted[sorted.length / 2]
+    return pairs if median == 0
+
+    threshold = median * factor
+    pairs.map { |bucket, value| [bucket, value > threshold ? 0 : value] }
   end
 
   def with_pg
