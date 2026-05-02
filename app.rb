@@ -84,6 +84,21 @@ class App < Sinatra::Base
     end
   end
 
+  get '/api/gas/recent' do
+    minutes = params[:minutes].to_i
+    minutes = 480 if minutes == 0
+    cutoff = Time.now - (minutes * 60)
+
+    with_redis do |redis|
+      data = redis.lrange("recent_gas_measurements", 0, -1)
+
+      data
+        .map { |row| JSON.parse(row) }
+        .select { |row| Time.parse(row["timestamp"]) >= cutoff }
+        .to_json
+    end
+  end
+
   get '/api/water/recent' do
     minutes = params[:minutes].to_i
 
